@@ -50,6 +50,7 @@
         <div id="splash-logged-in-row" style="display:none;align-items:center;gap:0.75rem">
           <span id="splash-username-display" style="font-size:0.8rem;color:rgba(200,147,58,0.9)"></span>
           <button id="btn-manage-team" class="btn btn-ghost" style="font-size:0.75rem">👥 Team</button>
+          <button id="btn-go-admin" class="btn btn-ghost" style="display:none;font-size:0.75rem;color:#E74C3C">⚙ Admin</button>
           <button id="btn-auth-logout" class="btn btn-ghost" style="font-size:0.75rem;color:#5A5870">Sign Out</button>
         </div>
       </div>
@@ -196,6 +197,90 @@
         </button>
       </div>
 
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- ADMIN DASHBOARD                                          -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div id="screen-admin" class="screen admin-screen">
+    <div class="adm-layout">
+
+      <!-- Sidebar -->
+      <aside class="adm-sidebar">
+        <div class="adm-brand">
+          <span class="adm-brand-logo">✈</span>
+          <span class="adm-brand-name">SkyHigh</span>
+          <span class="adm-brand-badge">ADMIN</span>
+        </div>
+        <nav class="adm-nav">
+          <button class="adm-nav-btn active" data-tab="overview"  onclick="SkyHigh.Admin.switchTab('overview')">📊 Overview</button>
+          <button class="adm-nav-btn"        data-tab="users"     onclick="SkyHigh.Admin.switchTab('users')">👥 Users</button>
+          <button class="adm-nav-btn"        data-tab="teams"     onclick="SkyHigh.Admin.switchTab('teams')">🏆 Teams</button>
+          <button class="adm-nav-btn"        data-tab="lobbies"   onclick="SkyHigh.Admin.switchTab('lobbies')">🎮 Lobbies</button>
+          <button class="adm-nav-btn"        data-tab="analytics" onclick="SkyHigh.Admin.switchTab('analytics')">📈 Analytics</button>
+        </nav>
+        <div class="adm-sidebar-footer">
+          <div class="adm-admin-user" id="adm-admin-user">—</div>
+          <button class="adm-exit-btn" onclick="SkyHigh.Admin.exit()">← Back to Game</button>
+        </div>
+      </aside>
+
+      <!-- Main Content -->
+      <main class="adm-main">
+
+        <!-- Overview -->
+        <div id="adm-tab-overview" class="adm-tab-content">
+          <div class="adm-page-header">
+            <div class="adm-page-title">Dashboard Overview</div>
+            <button class="adm-btn" onclick="SkyHigh.Admin.loadOverview()">↺ Refresh</button>
+          </div>
+          <div id="adm-overview-stats"></div>
+        </div>
+
+        <!-- Users -->
+        <div id="adm-tab-users" class="adm-tab-content" style="display:none">
+          <div class="adm-page-header">
+            <div class="adm-page-title">User Management</div>
+            <div class="adm-search-row">
+              <input id="adm-user-search" class="adm-search-input" type="text" placeholder="Search username or email…" oninput="SkyHigh.Admin.loadUsers(this.value)">
+              <button class="adm-btn" onclick="SkyHigh.Admin.loadUsers()">↺ Refresh</button>
+            </div>
+          </div>
+          <div id="adm-users-table" class="adm-table-wrap"></div>
+        </div>
+
+        <!-- Teams -->
+        <div id="adm-tab-teams" class="adm-tab-content" style="display:none">
+          <div class="adm-page-header">
+            <div class="adm-page-title">Team Management</div>
+            <button class="adm-btn" onclick="SkyHigh.Admin.loadTeams()">↺ Refresh</button>
+          </div>
+          <div id="adm-teams-table" class="adm-table-wrap"></div>
+        </div>
+
+        <!-- Lobbies -->
+        <div id="adm-tab-lobbies" class="adm-tab-content" style="display:none">
+          <div class="adm-page-header">
+            <div class="adm-page-title">Lobby Browser</div>
+            <div style="display:flex;gap:0.5rem">
+              <button class="adm-btn adm-btn-gold" onclick="SkyHigh.Admin.createPrivateLobby()">+ Create Private Lobby</button>
+              <button class="adm-btn" onclick="SkyHigh.Admin.loadLobbies()">↺ Refresh</button>
+            </div>
+          </div>
+          <div id="adm-lobbies-list" class="adm-lobbies-grid"></div>
+        </div>
+
+        <!-- Analytics -->
+        <div id="adm-tab-analytics" class="adm-tab-content" style="display:none">
+          <div class="adm-page-header">
+            <div class="adm-page-title">Analytics</div>
+            <button class="adm-btn" onclick="SkyHigh.Admin.loadAnalytics()">↺ Refresh</button>
+          </div>
+          <div id="adm-analytics-content"></div>
+        </div>
+
+      </main>
     </div>
   </div>
 
@@ -1116,6 +1201,7 @@
 <script src="src/firebase-config.js"></script>
 <script src="src/auth.js"></script>
 <script src="src/ui.js"></script>
+<script src="src/admin.js"></script>
 <script src="src/main.js"></script>
 
 </body>

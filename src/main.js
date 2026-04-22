@@ -19,6 +19,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (authRow) authRow.style.display = 'flex';
   }
 
+  // Show admin button if user is admin
+  if (restoredUser && SkyHigh.Auth?.isEnabled?.()) {
+    SkyHigh.Auth.checkIsAdmin?.().then(isAdmin => {
+      if (isAdmin) {
+        const adminBtn = document.getElementById('btn-go-admin');
+        if (adminBtn) {
+          adminBtn.style.display = 'inline-flex';
+          const adminUser = document.getElementById('adm-admin-user');
+          if (adminUser) adminUser.textContent = restoredUser.username;
+        }
+      }
+    });
+  }
+
   // ── SAVE: Check for existing save ───────────────────────
   // Try cloud save first if logged in, else fall back to localStorage
   let cloudSave = null;
@@ -86,6 +100,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Logout from splash
   document.getElementById('btn-auth-logout')?.addEventListener('click', () => {
     SkyHigh.UI.authLogout?.();
+  });
+
+  // Admin dashboard
+  document.getElementById('btn-go-admin')?.addEventListener('click', () => {
+    SkyHigh.Admin.open();
   });
 
   // ── AUTH SCREEN: Enter key support ───────────────────────

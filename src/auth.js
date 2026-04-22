@@ -360,6 +360,130 @@ window.SkyHigh.Auth = (() => {
       _currentUser.teamId = null;
       _currentUser.role   = null;
     },
+
+    // ── ADMIN API ────────────────────────────────────────────
+    async checkIsAdmin() {
+      if (!_currentUser || !_db) return false;
+      try {
+        const doc = await _db.collection('users').doc(_currentUser.uid).get();
+        return doc.data()?.isAdmin === true;
+      } catch(e) { return false; }
+    },
+
+    async adminGetStats() {
+      if (!_db) return {};
+      try {
+        const [usersSnap, teamsSnap] = await Promise.all([
+          _db.collection('users').get(),
+          _db.collection('teams').get(),
+        ]);
+        const teams = teamsSnap.docs.map(d => d.data());
+        const activeGames = teams.filter(t => t.status === 'playing').length;
+        const lobbyCount  = teams.filter(t => t.status === 'lobby').length;
+        return {
+          totalUsers: usersSnap.size,
+          totalTeams: teams.length,
+          activeGames,
+          lobbyCount,
+          totalMembers: teams.reduce((s, t) => s + (t.members?.length || 0), 0),
+        };
+      } catch(e) { return {}; }
+    },
+
+    async adminListUsers(query = '', lim = 200) {
+      if (!_db) return [];
+      try {
+        let ref = _db.collection('users').limit(lim);
+        const snap = await ref.get();
+        let docs = snap.docs.map(d => d.data());
+        if (query) {
+          const q = query.toLowerCase();
+          docs = docs.filter(u =>
+            u.username?.toLowerCase().includes(q) ||
+            u.email?.toLowerCase().includes(q) ||
+            u.uid?.includes(q)
+          );
+        }
+        return docs.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+      } catch(e) { console.warn(e); return []; }
+    },
+
+    async adminListTeams() {
+      if (!_db) return [];
+      try {
+        const snap = await _db.collection('teams').get();
+        return snap.docs.map(d => d.data()).sort((a, b) =>
+          (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)
+        );
+      } catch(e) { return []; }
+    },
+
+    async adminUpdateUser(uid, data) {
+      if (!_db) return { ok: false };
+      try {
+        await _db.collection('users').doc(uid).update(data);
+        return { ok: true };
+      } catch(e) { return { ok: false, reason: e.message }; }
+    },
+
+    async adminDeleteUser(uid) {
+      if (!_db) return { ok: false };
+      try {
+        // Remove from team first
+        const userDoc = await _db.collection('users').doc(uid).get();
+        const teamId = userDoc.data()?.teamId;
+        if (teamId) {
+          const teamDoc = await _db.collection('teams').doc(teamId).get();
+          if (teamDoc.exists) {
+            const updated = (teamDoc.data().members || []).filter(m => m.uid !== uid);
+            if (updated.length === 0) await _db.collection('teams').doc(teamId).delete();
+            else await _db.collection('teams').doc(teamId).update({ members: updated });
+          }
+        }
+        await _db.collection('users').doc(uid).delete();
+        return { ok: true };
+      } catch(e) { return { ok: false, reason: e.message }; }
+    },
+
+    async adminDeleteTeam(teamId) {
+      if (!_db) return { ok: false };
+      try {
+        // Reset all member teamId references
+        const teamDoc = await _db.collection('teams').doc(teamId).get();
+        if (teamDoc.exists) {
+          const members = teamDoc.data().members || [];
+          await Promise.all(members.map(m =>
+            _db.collection('users').doc(m.uid).update({ teamId: null, role: null }).catch(()=>{})
+          ));
+        }
+        await _db.collection('teams').doc(teamId).delete();
+        return { ok: true };
+      } catch(e) { return { ok: false, reason: e.message }; }
+    },
+
+    async adminCreateLobby(config) {
+      // config: { teamName, isPrivate, maxPlayers, allowedRoles, notes }
+      if (!_currentUser || !_db) return { ok: false, reason: 'Not logged in' };
+      const inviteCode = _genCode();
+      const teamId = _db.collection('teams').doc().id;
+      try {
+        await _db.collection('teams').doc(teamId).set({
+          teamId,
+          teamName:     config.teamName || 'Admin Lobby',
+          inviteCode,
+          createdAt:    firebase.firestore.FieldValue.serverTimestamp(),
+          createdBy:    _currentUser.uid,
+          status:       'lobby',
+          isPrivate:    config.isPrivate || false,
+          maxPlayers:   config.maxPlayers || 4,
+          allowedRoles: config.allowedRoles || ['CEO','CMO','CFO','CHRO'],
+          notes:        config.notes || '',
+          gameState:    null,
+          members:      [],
+        });
+        return { ok: true, teamId, inviteCode };
+      } catch(e) { return { ok: false, reason: e.message }; }
+    },
   };
 
   // ── HELPERS ───────────────────────────────────────────────

@@ -7,31 +7,40 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Initialize UI
   SkyHigh.UI.init();
 
-  // ── AUTH: Restore session ────────────────────────────────
+  // ── AUTH: Always show login row; restore session if Firebase on ──
   let restoredUser = null;
+  // Always show the auth row (login shows limited-mode when Firebase off)
+  const authRow = document.getElementById('splash-auth-row');
+  if (authRow) authRow.style.display = 'flex';
+
   if (SkyHigh.Auth?.isEnabled?.()) {
     restoredUser = await SkyHigh.Auth.restoreSession();
     if (restoredUser) {
       SkyHigh.UI._updateSplashUserPill?.(restoredUser);
     }
-    // Show auth button row on splash
-    const authRow = document.getElementById('splash-auth-row');
-    if (authRow) authRow.style.display = 'flex';
   }
 
-  // Show admin button if user is admin
+  // ── ADMIN: Show admin button (Firebase admin or local dev PIN) ───
+  // Local dev admin: hold Shift and click the "⚙" area, or use PIN
   if (restoredUser && SkyHigh.Auth?.isEnabled?.()) {
     SkyHigh.Auth.checkIsAdmin?.().then(isAdmin => {
       if (isAdmin) {
         const adminBtn = document.getElementById('btn-go-admin');
-        if (adminBtn) {
-          adminBtn.style.display = 'inline-flex';
-          const adminUser = document.getElementById('adm-admin-user');
-          if (adminUser) adminUser.textContent = restoredUser.username;
-        }
+        if (adminBtn) adminBtn.style.display = 'inline-flex';
+        const adminUser = document.getElementById('adm-admin-user');
+        if (adminUser) adminUser.textContent = restoredUser.username;
       }
     });
   }
+  // Dev/local admin access via keyboard shortcut: Ctrl+Shift+A on splash
+  document.addEventListener('keydown', e => {
+    if (e.ctrlKey && e.shiftKey && e.key === 'A') {
+      const pin = prompt('Admin PIN:');
+      if (pin === 'skyhigh-admin-2025') {
+        SkyHigh.Admin._devOpen();
+      }
+    }
+  });
 
   // ── SAVE: Check for existing save ───────────────────────
   // Try cloud save first if logged in, else fall back to localStorage

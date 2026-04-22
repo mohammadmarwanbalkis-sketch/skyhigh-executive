@@ -2643,8 +2643,16 @@ window.SkyHigh.UI = (() => {
       const btn    = document.getElementById('btn-auth-login');
       if (!field || !pass) return;
       if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
-      btn && (btn.disabled = true, btn.textContent = 'Signing in…');
 
+      if (!SkyHigh.Auth.isEnabled()) {
+        if (errEl) {
+          errEl.textContent = 'Online accounts require Firebase — connect a project in firebase-config.js to enable login.';
+          errEl.style.display = 'block';
+        }
+        return;
+      }
+
+      btn && (btn.disabled = true, btn.textContent = 'Signing in…');
       const result = await SkyHigh.Auth.login(field.value.trim(), pass.value);
 
       btn && (btn.disabled = false, btn.textContent = 'Sign In  →');

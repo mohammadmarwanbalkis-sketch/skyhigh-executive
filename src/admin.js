@@ -12,9 +12,17 @@ window.SkyHigh.Admin = (() => {
 
   const ADM = {
 
+    // Dev/local admin — no Firebase needed (called via Ctrl+Shift+A + PIN)
+    _devOpen() {
+      const adminUser = document.getElementById('adm-admin-user');
+      if (adminUser) adminUser.textContent = 'Dev Admin';
+      SkyHigh.UI.showScreen('admin');
+      ADM.switchTab('overview');
+    },
+
     async open() {
       if (!SkyHigh.Auth.isEnabled()) {
-        SkyHigh.UI.toast('Firebase not configured — admin unavailable', 'error');
+        SkyHigh.UI.toast('Firebase not configured — use Ctrl+Shift+A for dev admin', 'info', 4000);
         return;
       }
       if (!SkyHigh.Auth.isLoggedIn()) {
@@ -27,6 +35,8 @@ window.SkyHigh.Admin = (() => {
         SkyHigh.UI.toast('Access denied — admin only', 'error', 3000);
         return;
       }
+      const adminUser = document.getElementById('adm-admin-user');
+      if (adminUser) adminUser.textContent = SkyHigh.Auth.getUser()?.username || 'Admin';
       SkyHigh.UI.showScreen('admin');
       ADM.switchTab('overview');
     },

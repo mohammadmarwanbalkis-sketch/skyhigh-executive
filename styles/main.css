@@ -5117,7 +5117,8 @@ body.sidebar-collapsed #sidebar-toggle { /* fallback */ }
 }
 
 /* ── ADMIN DASHBOARD ────────────────────────────────────── */
-.admin-screen { display: flex !important; padding: 0 !important; }
+.admin-screen { padding: 0 !important; }
+#screen-admin.active { display: flex !important; }
 .adm-layout { display: flex; width: 100%; height: 100vh; overflow: hidden; }
 
 /* Sidebar */

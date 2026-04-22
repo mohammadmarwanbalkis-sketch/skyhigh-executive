@@ -4445,3 +4445,117 @@ body.sidebar-collapsed #sidebar-toggle { /* fallback */ }
 
 /* Remove old sidebar-toggle styles that are now superseded */
 #sidebar #sidebar-toggle { display: none !important; }
+
+/* ── CUSTOMER LOYALTY WIDGET ──────────────────────────────── */
+.overview-loyalty-section {
+  padding: 10px 14px;
+  background: rgba(200,147,58,0.04);
+  border-radius: 8px;
+  margin: 0 0 8px;
+}
+.overview-loyalty-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.overview-loyalty-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #9A9080;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.overview-loyalty-pct {
+  font-size: 1rem;
+  font-weight: 700;
+}
+.overview-loyalty-bar-track {
+  height: 5px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 5px;
+}
+.overview-loyalty-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.4s ease, background 0.3s ease;
+}
+.overview-loyalty-tier {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.overview-loyalty-desc {
+  font-size: 0.67rem;
+  color: #6A6880;
+  margin-top: 3px;
+}
+
+/* ── CASCADE CARDS PANEL ─────────────────────────────────── */
+.overview-cascade-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 4px 0 6px;
+}
+.cascade-empty {
+  font-size: 0.68rem;
+  color: #5A5870;
+  font-style: italic;
+  padding: 6px 14px;
+}
+.cascade-card-chip {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 9px 14px;
+  border-radius: 8px;
+  border-left: 3px solid;
+}
+.cascade-card-chip.benefit {
+  background: rgba(46,204,113,0.06);
+  border-color: #2ECC71;
+}
+.cascade-card-chip.penalty {
+  background: rgba(231,76,60,0.06);
+  border-color: #E74C3C;
+}
+.cascade-chip-icon {
+  font-size: 1rem;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.cascade-chip-body { flex: 1; min-width: 0; }
+.cascade-chip-name {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #EDE8D8;
+  margin-bottom: 2px;
+  letter-spacing: 0.03em;
+}
+.cascade-chip-desc {
+  font-size: 0.62rem;
+  color: #7A7A90;
+  line-height: 1.5;
+}
+
+/* ── SKYFORCE CRISIS BADGE ─────────────────────────────────── */
+/* Style scheduled SkyForce events distinctly in crisis modal */
+.sf-event-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(0,194,203,0.12);
+  color: #00C2CB;
+  border: 1px solid rgba(0,194,203,0.25);
+  margin-bottom: 8px;
+}

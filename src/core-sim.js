@@ -91,6 +91,17 @@ window.SkyHigh.CoreSim = (() => {
         // ── CUSTOMER CARE (hidden competency) ────────────
         customerCare: 50,    // 0-100 hidden score, revealed after runway crises
 
+        // ── CUSTOMER LOYALTY ──────────────────────────────
+        customerLoyalty: 50, // 0-100 tracked loyalty %; affects demand multipliers
+
+        // ── CASCADE CARDS ─────────────────────────────────
+        // Flags set by SkyForce board decision outcomes
+        cascadeCards: [],    // array of cascade card IDs currently held
+
+        // ── SCHEDULED EVENT QUEUE ─────────────────────────
+        // Deferred SkyForce events (double-booked rounds or boss conflicts)
+        scheduledEventQueue: [],
+
         // ── BULK FUEL SYSTEM ──────────────────────────────
         fuelReserves: 0,     // litres in reserve tank (bought at locked price)
         fuelReservePrice: 0, // $/litre price fuel was purchased at
@@ -776,11 +787,41 @@ window.SkyHigh.CoreSim = (() => {
 
     _rollCrisis() {
       // Boss crises override at specific rounds (fixed triggerRound)
-      const boss = SkyHigh.CRISES.find(c => c.isBoss && c.triggerRound === state.round);
+      const boss = SkyHigh.CRISES.find(c => c.isBoss && !c.isRunwayCrisis && c.triggerRound === state.round);
       if (boss) {
+        // If there's also a scheduled SkyForce event this round, defer it to the queue
+        const deferrable = SkyHigh.CRISES.find(c =>
+          c.isScheduledEvent && c.triggerRound === state.round &&
+          !state.crisisHistory.find(h => h.crisisId === c.id) &&
+          !state.scheduledEventQueue.find(q => q.id === c.id)
+        );
+        if (deferrable) state.scheduledEventQueue.push(deferrable);
+
         state.activeCrisis = boss;
         state.currentBossPhase = 0;
         return { type: 'BOSS', crisis: boss };
+      }
+
+      // ── DRAIN QUEUED SCHEDULED EVENTS (deferred from boss/double-booked rounds) ──
+      if (state.scheduledEventQueue.length > 0) {
+        const queued = state.scheduledEventQueue.shift();
+        state.activeCrisis = queued;
+        return { type: 'CRISIS', crisis: queued };
+      }
+
+      // ── SKYFORCE SCHEDULED EVENTS — fixed round board decisions ──
+      // Use filter to catch doubles; fire first, queue the rest for next round
+      const scheduledAll = SkyHigh.CRISES.filter(c =>
+        c.isScheduledEvent &&
+        c.triggerRound === state.round &&
+        !state.crisisHistory.find(h => h.crisisId === c.id) &&
+        !state.scheduledEventQueue.find(q => q.id === c.id)
+      );
+      if (scheduledAll.length > 0) {
+        const [first, ...rest] = scheduledAll;
+        if (rest.length > 0) state.scheduledEventQueue.push(...rest);
+        state.activeCrisis = first;
+        return { type: 'CRISIS', crisis: first };
       }
 
       // ── RUNWAY AIRSPACE CRISIS — triggered by active world events ──
@@ -841,6 +882,14 @@ window.SkyHigh.CoreSim = (() => {
         return sum + (plane ? plane.costM * 1_000_000 * SkyHigh.ECONOMY.maintenancePctFleet : 0);
       }, 0);
       totalExpenses += maintenanceCost;
+
+      // ── CASCADE CARD QUARTERLY COSTS ─────────────────────────
+      // Aging Operations: +$2M extra maintenance per quarter
+      if (_hasCard('AGING_OPERATIONS')) totalExpenses += 2_000_000;
+      // Cargo Divested: -$1.5M quarterly revenue permanently lost
+      if (_hasCard('CARGO_DIVESTED'))   totalRevenue  = Math.max(0, totalRevenue - 1_500_000);
+      // Government Board Card: -$1M/yr in forced loss-making routes ($250K/quarter)
+      if (_hasCard('GOVERNMENT_BOARD_CARD')) totalExpenses += 250_000;
 
       // Route revenue/cost
       state.routes.forEach(route => {
@@ -909,7 +958,9 @@ window.SkyHigh.CoreSim = (() => {
         const cargoBase  = SkyHigh.ECONOMY.ticketFareBase[band].economy * 0.6;
         const cargoTons  = Math.round((origin.demand + dest.demand) / 4);
         const cargoMult  = route.fareMultiplier || 1.0;
-        const eventMod   = API._getEventDemandMod(route.originId, route.destId, true);
+        // Cargo event modifier — CARGO_DIVESTED card removes event uplifts
+        const rawCargoMod = API._getEventDemandMod(route.originId, route.destId, true);
+        const eventMod    = _hasCard('CARGO_DIVESTED') ? Math.min(1.0, rawCargoMod) : rawCargoMod;
         return Math.round(cargoBase * cargoTons * 13 * (state.fareMult || 1) * cargoMult * eventMod);
       }
 
@@ -923,10 +974,13 @@ window.SkyHigh.CoreSim = (() => {
       const volatility = archetype.demandVolatility;
       const demandNoise = 1 + (Math.random() - 0.5) * volatility;
 
-      // World event modifier
+      // World event modifier — adjusted by Customer Loyalty bracket
       const eventMods = API._getEventDemandMod(route.originId, route.destId, false);
-      const paxEventMod = eventMods.pax || 1.0;
-      const bizEventMod = eventMods.biz || 1.0;
+      const rawPaxMod  = eventMods.pax || 1.0;
+      const rawBizMod  = eventMods.biz || 1.0;
+      const loyalty    = state.customerLoyalty || 50;
+      const paxEventMod = _applyLoyaltyToDemandMod(rawPaxMod, loyalty);
+      const bizEventMod = _applyLoyaltyToDemandMod(rawBizMod, loyalty);
 
       // Passenger demand split: business, tourism, VFR
       const split = state.passengerDemandSplit;
@@ -1019,10 +1073,85 @@ window.SkyHigh.CoreSim = (() => {
       if (effects.servicePrestige) state.servicePrestige  = _clamp(state.servicePrestige + effects.servicePrestige);
       if (effects.demandMult)      state.demandMultiplier = Math.max(0.3, state.demandMultiplier * effects.demandMult);
       if (effects.fareMult)        state.fareMult         = Math.max(0.5, (state.fareMult || 1) * effects.fareMult);
-      // customerCare is a hidden competency — tracked quietly, revealed after runway crises
+      if (effects.fuelPriceMultiplier) {
+        state.fuelPriceMultiplier = Math.max(0.7, Math.min(2.5, (state.fuelPriceMultiplier || 1) * effects.fuelPriceMultiplier));
+      }
+      // customerCare — hidden competency, revealed after runway crises
       if (typeof effects.customerCare === 'number') {
         state.customerCare = Math.max(0, Math.min(100, (state.customerCare || 50) + effects.customerCare));
       }
+      // customerLoyalty — visible loyalty % (0-100), drives demand multiplier
+      if (typeof effects.customerLoyalty === 'number') {
+        state.customerLoyalty = Math.max(0, Math.min(100, (state.customerLoyalty || 50) + effects.customerLoyalty));
+        // Loyalty changes also nudge brand pts at a small rate
+        if (effects.customerLoyalty > 0) state.servicePrestige = _clamp(state.servicePrestige + Math.ceil(effects.customerLoyalty * 0.1));
+        if (effects.customerLoyalty < 0) state.servicePrestige = _clamp(state.servicePrestige + Math.floor(effects.customerLoyalty * 0.15));
+      }
+      // cascadeCard — flag a cascade card as gained/lost
+      if (effects.cascadeCard) {
+        const cardId = effects.cascadeCard;
+        if (cardId === 'AGING_OPERATIONS' || cardId === 'ANTI_ENVIRONMENT' || cardId === 'CARGO_DIVESTED' || cardId === 'GOVERNMENT_BOARD_CARD') {
+          // Penalty cards — always add (permanent flags)
+          _addCard(cardId);
+        } else {
+          // Benefit cards — add if not already held
+          _addCard(cardId);
+        }
+        // Apply immediate card effects
+        API._applyCascadeCardEffect(cardId);
+      }
+    },
+
+    // ── CASCADE CARD IMMEDIATE EFFECTS ───────────────────────
+    _applyCascadeCardEffect(cardId) {
+      switch (cardId) {
+        case 'TRUSTED_OPERATOR':
+          state.boardConfidence = _clamp(state.boardConfidence + 3);
+          state.safetyShield    = _clamp(state.safetyShield + 5);
+          break;
+        case 'MODERN_FLEET':
+          state.safetyShield    = _clamp(state.safetyShield + 5);
+          state.crewLoyalty     = _clamp(state.crewLoyalty + 3);
+          break;
+        case 'PEOPLE_FIRST':
+          state.crewLoyalty     = _clamp(state.crewLoyalty + 8);
+          state.servicePrestige = _clamp(state.servicePrestige + 5);
+          break;
+        case 'GREEN_LEADER':
+          state.servicePrestige = _clamp(state.servicePrestige + 5);
+          state.boardConfidence = _clamp(state.boardConfidence + 3);
+          break;
+        case 'GLOBAL_BRAND':
+          state.demandMultiplier = Math.min(2.0, (state.demandMultiplier || 1) * 1.08);
+          state.servicePrestige  = _clamp(state.servicePrestige + 8);
+          break;
+        case 'ANTI_ENVIRONMENT':
+          // Permanent penalty — cap servicePrestige at 70 (enforced in _applyStatDrift)
+          state.servicePrestige = Math.min(70, state.servicePrestige - 15);
+          break;
+        case 'AGING_OPERATIONS':
+          // Manifests as extra maintenance cost per quarter — handled in _calculateResults
+          state.safetyShield = _clamp(state.safetyShield - 5);
+          break;
+        case 'CARGO_DIVESTED':
+          // Cargo revenue blocked — handled in _calcRouteRevenue
+          break;
+        case 'FIRST_MOVER':
+          state.demandMultiplier = Math.min(2.0, (state.demandMultiplier || 1) * 1.05);
+          break;
+      }
+    },
+
+    // ── EXPOSE CASCADE CARD HELPERS (public) ─────────────────
+    hasCascadeCard(cardId) { return _hasCard(cardId); },
+    getCascadeCards()      { return state.cascadeCards || []; },
+
+    // ── GET CUSTOMER LOYALTY INFO ─────────────────────────────
+    getCustomerLoyaltyInfo() {
+      const loyalty  = state.customerLoyalty || 50;
+      const brackets = SkyHigh.CUSTOMER_LOYALTY?.brackets || [];
+      const bracket  = brackets.find(b => loyalty >= b.minLoyalty) || brackets[brackets.length - 1];
+      return { loyalty, label: bracket?.label || 'Baseline', color: bracket?.color || '#F39C12' };
     },
 
     // ── CUSTOMER CARE OUTCOME ─────────────────────────────────
@@ -1064,8 +1193,23 @@ window.SkyHigh.CoreSim = (() => {
       const speed  = 0.05;
       state.boardConfidence = _drift(state.boardConfidence, target, speed);
       state.safetyShield    = _drift(state.safetyShield, target, speed);
-      state.crewLoyalty     = _drift(state.crewLoyalty, target, speed);
+
+      // Crew loyalty drift target boosted if People-First card held
+      const crewTarget = _hasCard('PEOPLE_FIRST') ? 80 : target;
+      state.crewLoyalty = _drift(state.crewLoyalty, crewTarget, speed);
+
+      // Service prestige — cap at 70 if Anti-Environment flag is set
       state.servicePrestige = _drift(state.servicePrestige, target, speed);
+      if (_hasCard('ANTI_ENVIRONMENT')) {
+        state.servicePrestige = Math.min(70, state.servicePrestige);
+      }
+
+      // Customer Loyalty drifts slowly toward 50 (baseline) each round
+      const loyaltyTarget = 50;
+      const loyaltySpeed  = 0.03; // slower drift than competencies
+      state.customerLoyalty = Math.max(0, Math.min(100,
+        Math.round(state.customerLoyalty + (loyaltyTarget - state.customerLoyalty) * loyaltySpeed)
+      ));
     },
 
     _processPassiveDrain() {
@@ -1150,6 +1294,35 @@ window.SkyHigh.CoreSim = (() => {
   // ── UTIL ──────────────────────────────────────────────────
   function _clamp(val, min = 0, max = 100) { return Math.min(max, Math.max(min, Math.round(val))); }
   function _drift(val, target, speed) { return _clamp(val + (target - val) * speed); }
+
+  // ── CUSTOMER LOYALTY DEMAND MODIFIER ─────────────────────
+  // Applies loyalty bracket to modify the effect of world-event demand changes.
+  // Negative events: high loyalty = cushioned. Low loyalty = amplified.
+  // Positive events: high loyalty = amplified. Low loyalty = cushioned.
+  function _applyLoyaltyToDemandMod(rawMod, loyalty) {
+    if (!SkyHigh.CUSTOMER_LOYALTY) return rawMod;
+    const brackets = SkyHigh.CUSTOMER_LOYALTY.brackets;
+    const bracket  = brackets.find(b => loyalty >= b.minLoyalty) || brackets[brackets.length - 1];
+    if (rawMod < 1.0) {
+      // Negative event — loyalty cushions the drop
+      return 1.0 - (1.0 - rawMod) * bracket.negativeMultiplier;
+    } else if (rawMod > 1.0) {
+      // Positive event — loyalty amplifies the gain
+      return 1.0 + (rawMod - 1.0) * bracket.positiveMultiplier;
+    }
+    return rawMod; // no event, no change
+  }
+
+  // ── CASCADE CARD HELPERS ──────────────────────────────────
+  function _hasCard(cardId) {
+    return state.cascadeCards.includes(cardId);
+  }
+
+  function _addCard(cardId) {
+    if (!state.cascadeCards.includes(cardId)) {
+      state.cascadeCards.push(cardId);
+    }
+  }
 
   return API;
 })();

@@ -373,6 +373,46 @@ window.SkyHigh.UI = (() => {
       if (netEl && s.netThisRound !== 0) {
         netEl.className = `at3-stat-val ${s.netThisRound >= 0 ? 'positive' : 'negative'}`;
       }
+
+      // ── Customer Loyalty widget ───────────────────────────
+      const loyaltyEl = document.getElementById('overview-loyalty-section');
+      if (loyaltyEl) {
+        const loyaltyInfo = SkyHigh.CoreSim.getCustomerLoyaltyInfo?.() || { loyalty: 50, label: 'Baseline', color: '#F39C12' };
+        const pct = loyaltyInfo.loyalty;
+        loyaltyEl.innerHTML = `
+          <div class="overview-loyalty-header">
+            <span class="overview-loyalty-label">Customer Loyalty</span>
+            <span class="overview-loyalty-pct" style="color:${loyaltyInfo.color}">${pct}%</span>
+          </div>
+          <div class="overview-loyalty-bar-track">
+            <div class="overview-loyalty-bar-fill" style="width:${pct}%;background:${loyaltyInfo.color}"></div>
+          </div>
+          <div class="overview-loyalty-tier" style="color:${loyaltyInfo.color}">${loyaltyInfo.label}</div>
+          <div class="overview-loyalty-desc">${pct >= 65 ? '🛡 Demand shocks are cushioned' : pct >= 50 ? '⚡ Baseline demand sensitivity' : '⚠️ Higher exposure to demand swings'}</div>
+        `;
+      }
+
+      // ── Cascade Cards panel ───────────────────────────────
+      const cardsEl = document.getElementById('overview-cascade-cards');
+      if (cardsEl) {
+        const cards = SkyHigh.CoreSim.getCascadeCards?.() || [];
+        if (!cards.length) {
+          cardsEl.innerHTML = '<div class="cascade-empty">No board decisions have unlocked cascade cards yet.</div>';
+        } else {
+          cardsEl.innerHTML = cards.map(cardId => {
+            const card = SkyHigh.CASCADE_CARDS?.[cardId];
+            if (!card) return '';
+            const isPenalty = ['AGING_OPERATIONS','ANTI_ENVIRONMENT','CARGO_DIVESTED','GOVERNMENT_BOARD_CARD'].includes(cardId);
+            return `<div class="cascade-card-chip ${isPenalty ? 'penalty' : 'benefit'}">
+              <span class="cascade-chip-icon">${card.icon}</span>
+              <div class="cascade-chip-body">
+                <div class="cascade-chip-name">${card.name}</div>
+                <div class="cascade-chip-desc">${card.desc}</div>
+              </div>
+            </div>`;
+          }).join('');
+        }
+      }
     },
 
     _renderAt3RouteList() {

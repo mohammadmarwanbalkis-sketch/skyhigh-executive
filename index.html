@@ -16,6 +16,11 @@
 
   <!-- Map libraries (CDN) -->
   <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
+
+  <!-- Firebase SDK (loaded before app scripts) -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 </head>
 <body>
 <div id="app">
@@ -37,9 +42,161 @@
         </button>
         <div class="text-muted" style="font-size:0.7rem;margin-top:0.4rem" id="save-info-label"></div>
       </div>
+      <!-- Login button — shown when Firebase is enabled -->
+      <div id="splash-auth-row" style="display:none;flex-direction:column;align-items:center;gap:0.5rem">
+        <button id="btn-go-login" class="btn btn-ghost" style="font-size:0.85rem">
+          👤 Sign In / Create Account
+        </button>
+        <div id="splash-logged-in-row" style="display:none;align-items:center;gap:0.75rem">
+          <span id="splash-username-display" style="font-size:0.8rem;color:rgba(200,147,58,0.9)"></span>
+          <button id="btn-manage-team" class="btn btn-ghost" style="font-size:0.75rem">👥 Team</button>
+          <button id="btn-auth-logout" class="btn btn-ghost" style="font-size:0.75rem;color:#5A5870">Sign Out</button>
+        </div>
+      </div>
       <div class="text-muted" style="font-size:0.75rem;letter-spacing:0.1em">Press anywhere to start</div>
     </div>
     <div class="splash-by">AN OZUNA INTERACTIVE PRODUCTION</div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- AUTH SCREEN — Login / Register                          -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div id="screen-auth" class="screen auth-screen">
+    <div class="auth-card">
+      <div class="auth-logo">✈ SkyHigh</div>
+      <div class="auth-subtitle">Executive Edition</div>
+
+      <!-- Tab toggle -->
+      <div class="auth-tabs">
+        <button class="auth-tab active" id="auth-tab-login" onclick="SkyHigh.UI.authShowTab('login')">Sign In</button>
+        <button class="auth-tab" id="auth-tab-register" onclick="SkyHigh.UI.authShowTab('register')">Create Account</button>
+      </div>
+
+      <!-- Login form -->
+      <div id="auth-form-login" class="auth-form">
+        <div class="auth-field">
+          <label class="auth-label">Username or Email</label>
+          <input id="auth-login-email" class="auth-input" type="text" placeholder="captain_marcus" autocomplete="username">
+        </div>
+        <div class="auth-field">
+          <label class="auth-label">Password</label>
+          <input id="auth-login-pass" class="auth-input" type="password" placeholder="••••••••" autocomplete="current-password">
+        </div>
+        <div class="auth-error" id="auth-login-error" style="display:none"></div>
+        <button class="auth-btn-primary" id="btn-auth-login" onclick="SkyHigh.UI.authLogin()">
+          Sign In  →
+        </button>
+        <div class="auth-or">
+          <span>or</span>
+        </div>
+        <button class="auth-btn-ghost" onclick="SkyHigh.UI.authSkip()">
+          Continue without account
+        </button>
+      </div>
+
+      <!-- Register form -->
+      <div id="auth-form-register" class="auth-form" style="display:none">
+        <div class="auth-field">
+          <label class="auth-label">Username <span class="auth-hint">(visible to teammates)</span></label>
+          <input id="auth-reg-username" class="auth-input" type="text" placeholder="captain_marcus" maxlength="20" autocomplete="username">
+        </div>
+        <div class="auth-field">
+          <label class="auth-label">Email</label>
+          <input id="auth-reg-email" class="auth-input" type="email" placeholder="you@example.com" autocomplete="email">
+        </div>
+        <div class="auth-field">
+          <label class="auth-label">Password</label>
+          <input id="auth-reg-pass" class="auth-input" type="password" placeholder="Min 6 characters" autocomplete="new-password">
+        </div>
+        <div class="auth-error" id="auth-reg-error" style="display:none"></div>
+        <button class="auth-btn-primary" id="btn-auth-register" onclick="SkyHigh.UI.authRegister()">
+          Create Account  →
+        </button>
+        <div class="auth-or"><span>or</span></div>
+        <button class="auth-btn-ghost" onclick="SkyHigh.UI.authSkip()">
+          Continue without account
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- TEAM LOBBY SCREEN                                       -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div id="screen-team" class="screen team-screen">
+    <div class="team-card">
+
+      <!-- Header -->
+      <div class="team-header">
+        <div class="team-logo">✈ SkyHigh</div>
+        <div class="team-user-pill" id="team-user-pill">
+          <span id="team-user-avatar">👤</span>
+          <span id="team-user-name">Player</span>
+        </div>
+      </div>
+
+      <!-- No team yet — create or join -->
+      <div id="team-lobby-state" class="team-lobby-state">
+        <div class="team-section-title">Team Up or Fly Solo</div>
+        <p class="team-desc">Play alone as CEO or form a team of up to 5 people — each with a unique executive role shaping your airline together.</p>
+
+        <div class="team-two-col">
+          <!-- Create -->
+          <div class="team-action-card">
+            <div class="team-action-icon">🏗️</div>
+            <div class="team-action-label">Create Team</div>
+            <input id="input-team-name" class="auth-input" type="text" placeholder="e.g. Skyward United Co." maxlength="40">
+            <button class="auth-btn-primary" onclick="SkyHigh.UI.teamCreate()">Create  →</button>
+          </div>
+
+          <!-- Join -->
+          <div class="team-action-card">
+            <div class="team-action-icon">🔗</div>
+            <div class="team-action-label">Join Team</div>
+            <input id="input-invite-code" class="auth-input" type="text" placeholder="e.g. SKY-4X9P" maxlength="8" style="text-transform:uppercase">
+            <button class="auth-btn-primary" onclick="SkyHigh.UI.teamJoin()">Join  →</button>
+          </div>
+        </div>
+
+        <div class="team-solo-row">
+          <button class="auth-btn-ghost" onclick="SkyHigh.UI.teamSkip()">
+            Fly Solo (no team)  →
+          </button>
+        </div>
+      </div>
+
+      <!-- Team formed — roster -->
+      <div id="team-roster-state" class="team-roster-state" style="display:none">
+        <div class="team-name-display" id="team-name-display">Team Name</div>
+
+        <div class="team-invite-row">
+          <span class="team-invite-label">Invite Code</span>
+          <span class="team-invite-code" id="team-invite-code">—</span>
+          <button class="team-copy-btn" onclick="SkyHigh.UI.teamCopyCode()" title="Copy">📋</button>
+        </div>
+
+        <!-- Member slots -->
+        <div class="team-slots" id="team-slots">
+          <!-- Populated by JS -->
+        </div>
+
+        <!-- Role picker for self -->
+        <div class="team-role-section">
+          <div class="team-section-title" style="font-size:0.8rem;margin-bottom:0.6rem">Your Role</div>
+          <div class="team-role-grid" id="team-role-grid">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+
+        <button class="auth-btn-primary" style="margin-top:1rem" onclick="SkyHigh.UI.teamReady()">
+          Ready — Set Up Airline  →
+        </button>
+        <button class="auth-btn-ghost" style="margin-top:0.5rem" onclick="SkyHigh.UI.teamLeave()">
+          Leave Team
+        </button>
+      </div>
+
+    </div>
   </div>
 
   <!-- ═══════════════════════════════════════════════════════ -->
@@ -1006,6 +1163,8 @@
 <script src="src/core-sim.js"></script>
 <script src="src/map-engine.js"></script>
 <script src="src/renderer.js"></script>
+<script src="src/firebase-config.js"></script>
+<script src="src/auth.js"></script>
 <script src="src/ui.js"></script>
 <script src="src/main.js"></script>
 

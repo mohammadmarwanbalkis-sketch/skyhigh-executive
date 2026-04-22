@@ -1445,8 +1445,11 @@ window.SkyHigh.UI = (() => {
     advanceFromReport() {
       document.getElementById('report-overlay')?.classList.remove('visible');
       const result = SkyHigh.CoreSim.endReportPhase();
-      // Auto-save after each quarter
+      // Auto-save after each quarter (local + cloud)
       UI.saveGame();
+      if (SkyHigh.Auth?.isLoggedIn?.()) {
+        SkyHigh.Auth.cloudSave(SkyHigh.CoreSim.getState()).catch(() => {});
+      }
 
       if (result.gameOver) {
         UI._showEndGame(result.legacyTitle);
@@ -2452,6 +2455,264 @@ window.SkyHigh.UI = (() => {
 
     deleteSave() {
       localStorage.removeItem('skyhigh_save');
+    },
+
+    // ── AUTH UI ───────────────────────────────────────────────
+
+    authShowTab(tab) {
+      document.getElementById('auth-form-login').style.display    = tab === 'login'    ? 'flex' : 'none';
+      document.getElementById('auth-form-register').style.display = tab === 'register' ? 'flex' : 'none';
+      document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+      document.getElementById(`auth-tab-${tab}`)?.classList.add('active');
+    },
+
+    async authLogin() {
+      const field  = document.getElementById('auth-login-email');
+      const pass   = document.getElementById('auth-login-pass');
+      const errEl  = document.getElementById('auth-login-error');
+      const btn    = document.getElementById('btn-auth-login');
+      if (!field || !pass) return;
+      if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
+      btn && (btn.disabled = true, btn.textContent = 'Signing in…');
+
+      const result = await SkyHigh.Auth.login(field.value.trim(), pass.value);
+
+      btn && (btn.disabled = false, btn.textContent = 'Sign In  →');
+      if (!result.ok) {
+        if (errEl) { errEl.textContent = result.reason; errEl.style.display = 'block'; }
+        return;
+      }
+      UI._afterAuth(result.user);
+    },
+
+    async authRegister() {
+      const userEl = document.getElementById('auth-reg-username');
+      const email  = document.getElementById('auth-reg-email');
+      const pass   = document.getElementById('auth-reg-pass');
+      const errEl  = document.getElementById('auth-reg-error');
+      const btn    = document.getElementById('btn-auth-register');
+      if (!email || !userEl || !pass) return;
+      if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
+      btn && (btn.disabled = true, btn.textContent = 'Creating…');
+
+      const result = await SkyHigh.Auth.register(email.value.trim(), pass.value, userEl.value.trim());
+
+      btn && (btn.disabled = false, btn.textContent = 'Create Account  →');
+      if (!result.ok) {
+        if (errEl) { errEl.textContent = result.reason; errEl.style.display = 'block'; }
+        return;
+      }
+      UI._afterAuth(result.user);
+    },
+
+    authSkip() {
+      UI.showScreen('setup');
+    },
+
+    _afterAuth(user) {
+      // Update splash user pill if visible
+      UI._updateSplashUserPill(user);
+      // Go to team screen or directly to setup
+      UI.showScreen('team');
+      UI._renderTeamLobbyState(user);
+    },
+
+    _updateSplashUserPill(user) {
+      const loggedInRow = document.getElementById('splash-logged-in-row');
+      const loginBtn    = document.getElementById('btn-go-login');
+      const nameEl      = document.getElementById('splash-username-display');
+      if (user) {
+        if (loggedInRow) loggedInRow.style.display = 'flex';
+        if (loginBtn)    loginBtn.style.display     = 'none';
+        if (nameEl)      nameEl.textContent          = `👤 ${user.username}`;
+      } else {
+        if (loggedInRow) loggedInRow.style.display = 'none';
+        if (loginBtn)    loginBtn.style.display     = '';
+        if (nameEl)      nameEl.textContent          = '';
+      }
+    },
+
+    // ── TEAM UI ───────────────────────────────────────────────
+
+    _renderTeamLobbyState(user) {
+      const lobby  = document.getElementById('team-lobby-state');
+      const roster = document.getElementById('team-roster-state');
+      if (!lobby || !roster) return;
+
+      // Update user pill in team screen header
+      const pillName = document.getElementById('team-user-name');
+      if (pillName && user) pillName.textContent = user.username;
+
+      if (user?.teamId) {
+        // User is already in a team — load roster
+        lobby.style.display  = 'none';
+        roster.style.display = 'flex';
+        SkyHigh.Auth.getTeam(user.teamId).then(team => {
+          if (team) UI._renderTeamRoster(team);
+        });
+        SkyHigh.Auth.listenTeam(user.teamId, team => UI._renderTeamRoster(team));
+      } else {
+        lobby.style.display  = 'flex';
+        roster.style.display = 'none';
+      }
+    },
+
+    async teamCreate() {
+      const nameEl = document.getElementById('input-team-name');
+      const btn    = document.querySelector('.team-action-card:first-child .auth-btn-primary');
+      if (!nameEl) return;
+
+      btn && (btn.disabled = true);
+      const result = await SkyHigh.Auth.createTeam(nameEl.value.trim());
+      btn && (btn.disabled = false);
+
+      if (!result.ok) {
+        UI.toast(result.reason || 'Failed to create team', 'error', 3000);
+        return;
+      }
+      // Show roster
+      const lobby  = document.getElementById('team-lobby-state');
+      const roster = document.getElementById('team-roster-state');
+      if (lobby)  lobby.style.display  = 'none';
+      if (roster) roster.style.display = 'flex';
+
+      const team = await SkyHigh.Auth.getTeam(result.teamId);
+      if (team) UI._renderTeamRoster(team);
+      SkyHigh.Auth.listenTeam(result.teamId, t => UI._renderTeamRoster(t));
+    },
+
+    async teamJoin() {
+      const codeEl = document.getElementById('input-invite-code');
+      const btn    = document.querySelector('.team-action-card:last-child .auth-btn-primary');
+      if (!codeEl) return;
+
+      btn && (btn.disabled = true);
+      const result = await SkyHigh.Auth.joinTeam(codeEl.value.trim().toUpperCase());
+      btn && (btn.disabled = false);
+
+      if (!result.ok) {
+        UI.toast(result.reason || 'Invalid invite code', 'error', 3000);
+        return;
+      }
+      const lobby  = document.getElementById('team-lobby-state');
+      const roster = document.getElementById('team-roster-state');
+      if (lobby)  lobby.style.display  = 'none';
+      if (roster) roster.style.display = 'flex';
+
+      const team = await SkyHigh.Auth.getTeam(result.teamId);
+      if (team) UI._renderTeamRoster(team);
+      SkyHigh.Auth.listenTeam(result.teamId, t => UI._renderTeamRoster(t));
+    },
+
+    teamSkip() {
+      SkyHigh.Auth.stopListenTeam?.();
+      UI.showScreen('setup');
+    },
+
+    teamReady() {
+      SkyHigh.Auth.stopListenTeam?.();
+      UI.showScreen('setup');
+    },
+
+    async teamLeave() {
+      await SkyHigh.Auth.leaveTeam?.();
+      const lobby  = document.getElementById('team-lobby-state');
+      const roster = document.getElementById('team-roster-state');
+      if (lobby)  lobby.style.display  = 'flex';
+      if (roster) roster.style.display = 'none';
+    },
+
+    teamCopyCode() {
+      const code = document.getElementById('team-invite-code')?.textContent;
+      if (!code || code === '—') return;
+      navigator.clipboard.writeText(code).then(() => {
+        UI.toast('Invite code copied!', 'success', 2000);
+      }).catch(() => {
+        UI.toast(code, 'info', 5000);
+      });
+    },
+
+    _renderTeamRoster(team) {
+      // Update invite code display
+      const codeEl = document.getElementById('team-invite-code');
+      if (codeEl) codeEl.textContent = team.inviteCode || '—';
+
+      // Update team name header
+      const nameEl = document.getElementById('team-name-display');
+      if (nameEl) nameEl.textContent = team.teamName || 'Your Team';
+
+      // Render member slots
+      const slotsEl = document.getElementById('team-slots');
+      const roles   = SkyHigh.Auth.getRoles();
+      const currentUser = SkyHigh.Auth.getUser();
+      if (slotsEl) {
+        const allRoles = ['CEO', 'CMO', 'CFO', 'CHRO'];
+        slotsEl.innerHTML = allRoles.map(role => {
+          const member = team.members?.find(m => m.role === role);
+          const meta   = roles[role] || {};
+          if (member) {
+            const isMe    = member.uid === currentUser?.uid;
+            const online  = member.online !== false;
+            return `<div class="team-slot occupied ${isMe ? 'me' : ''}">
+              <span class="team-slot-online ${online ? '' : 'offline'}"></span>
+              <span class="team-slot-icon">${meta.icon || '👤'}</span>
+              <span class="team-slot-role">${role}</span>
+              <span class="team-slot-name">${member.username}${isMe ? ' (you)' : ''}</span>
+            </div>`;
+          } else {
+            return `<div class="team-slot empty">
+              <span class="team-slot-icon">${meta.icon || '👤'}</span>
+              <span class="team-slot-role">${role}</span>
+              <span class="team-slot-name">Open</span>
+            </div>`;
+          }
+        }).join('');
+      }
+
+      // Render role picker (only for current user to change their own role)
+      UI._renderTeamRoleGrid(team);
+    },
+
+    _renderTeamRoleGrid(team) {
+      const gridEl = document.getElementById('team-role-grid');
+      const roles  = SkyHigh.Auth.getRoles();
+      const user   = SkyHigh.Auth.getUser();
+      if (!gridEl || !user) return;
+
+      const takenRoles = (team.members || []).filter(m => m.uid !== user.uid).map(m => m.role);
+      const myRole     = (team.members || []).find(m => m.uid === user.uid)?.role;
+
+      gridEl.innerHTML = Object.entries(roles).map(([key, meta]) => {
+        const taken    = takenRoles.includes(key);
+        const selected = myRole === key;
+        return `<button class="team-role-btn ${selected ? 'selected' : ''} ${taken ? 'taken' : ''}"
+          ${taken ? 'disabled' : ''}
+          onclick="SkyHigh.UI.teamPickRole('${key}')">
+          <span class="team-role-icon">${meta.icon}</span>
+          <span class="team-role-name">${key}</span>
+          <span class="team-role-label">${meta.label}</span>
+          <span class="team-role-desc">${meta.desc}</span>
+        </button>`;
+      }).join('');
+    },
+
+    async teamPickRole(newRole) {
+      const user = SkyHigh.Auth.getUser();
+      if (!user?.teamId) return;
+      const result = await SkyHigh.Auth.changeRole(user.teamId, newRole);
+      if (!result.ok) {
+        UI.toast(result.reason || 'Role unavailable', 'error', 2500);
+      } else {
+        UI.toast(`Role changed to ${newRole}`, 'success', 2000);
+      }
+    },
+
+    async authLogout() {
+      SkyHigh.Auth.stopListenTeam?.();
+      await SkyHigh.Auth.logout?.();
+      UI._updateSplashUserPill(null);
+      UI.showScreen('splash');
+      UI.toast('Signed out.', 'info', 2000);
     },
   };
 

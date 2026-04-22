@@ -7,37 +7,108 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Initialize UI
   SkyHigh.UI.init();
 
-  // Check for existing save and show Continue button
-  if (SkyHigh.UI.hasSave?.()) {
+  // ── AUTH: Restore session ────────────────────────────────
+  let restoredUser = null;
+  if (SkyHigh.Auth?.isEnabled?.()) {
+    restoredUser = await SkyHigh.Auth.restoreSession();
+    if (restoredUser) {
+      SkyHigh.UI._updateSplashUserPill?.(restoredUser);
+    }
+    // Show auth button row on splash
+    const authRow = document.getElementById('splash-auth-row');
+    if (authRow) authRow.style.display = 'flex';
+  }
+
+  // ── SAVE: Check for existing save ───────────────────────
+  // Try cloud save first if logged in, else fall back to localStorage
+  let cloudSave = null;
+  if (restoredUser && SkyHigh.Auth?.isEnabled?.()) {
+    try { cloudSave = await SkyHigh.Auth.cloudLoad(); } catch(_) {}
+  }
+
+  const hasSave = cloudSave || SkyHigh.UI.hasSave?.();
+  if (hasSave) {
     const saveEl = document.getElementById('splash-continue');
     if (saveEl) saveEl.style.display = 'flex';
-    const save = SkyHigh.UI.loadGame?.();
+    const save = cloudSave || SkyHigh.UI.loadGame?.();
     const infoEl = document.getElementById('save-info-label');
     if (infoEl && save) {
-      const d = new Date(save.savedAt);
-      infoEl.textContent = `${save.profile?.airlineName || 'Unknown Airline'} · Q${save.state?.round} · ${d.toLocaleDateString()}`;
+      const d = save.savedAt ? new Date(save.savedAt) : null;
+      const dateStr = d ? d.toLocaleDateString() : '';
+      const airline = save.profile?.airlineName || cloudSave?.airlineName || 'Unknown Airline';
+      const round   = save.state?.round || cloudSave?.round || '?';
+      infoEl.textContent = `${airline} · Q${round}${dateStr ? ' · ' + dateStr : ''}`;
     }
   }
 
-  // Continue Campaign button
-  document.getElementById('btn-continue-game')?.addEventListener('click', () => {
-    const save = SkyHigh.UI.loadGame?.();
+  // ── SPLASH BUTTONS ───────────────────────────────────────
+
+  // New Game
+  document.getElementById('btn-new-game')?.addEventListener('click', () => {
+    SkyHigh.UI.showScreen('setup');
+  });
+
+  // Continue Campaign
+  document.getElementById('btn-continue-game')?.addEventListener('click', async () => {
+    let save = cloudSave || SkyHigh.UI.loadGame?.();
     if (!save) { SkyHigh.UI.toast('No save found.', 'error'); return; }
-    SkyHigh.CoreSim.init(save.profile);
-    Object.assign(SkyHigh.CoreSim.getState(), save.state);
+
+    // Cloud save may be raw gameState — normalize
+    let profile = save.profile;
+    let state   = save.state;
+    if (!profile && save.round) {
+      // Came from cloudLoad() as raw gameState
+      state   = save;
+      profile = { airlineName: save.airlineName, ceoName: save.ceoName,
+                  airlineCode: save.airlineCode, hubAirportId: save.hubAirportId,
+                  doctrineId: save.doctrineId };
+    }
+
+    SkyHigh.CoreSim.init(profile);
+    Object.assign(SkyHigh.CoreSim.getState(), state);
     SkyHigh.UI.showScreen('game');
     setTimeout(() => SkyHigh.UI._initGame(), 300);
   });
 
-  // Animate splash
-  setTimeout(() => {
-    document.getElementById('splash-cta')?.classList.add('fadeInUp');
-  }, 1200);
-
-  // Splash CTA
-  document.getElementById('btn-new-game')?.addEventListener('click', () => {
-    SkyHigh.UI.showScreen('setup');
+  // Go to Login
+  document.getElementById('btn-go-login')?.addEventListener('click', () => {
+    SkyHigh.UI.showScreen('auth');
+    SkyHigh.UI.authShowTab('login');
   });
+
+  // Manage Team (for logged-in users returning to team screen)
+  document.getElementById('btn-manage-team')?.addEventListener('click', () => {
+    const user = SkyHigh.Auth?.getUser?.();
+    SkyHigh.UI.showScreen('team');
+    SkyHigh.UI._renderTeamLobbyState?.(user);
+  });
+
+  // Logout from splash
+  document.getElementById('btn-auth-logout')?.addEventListener('click', () => {
+    SkyHigh.UI.authLogout?.();
+  });
+
+  // ── AUTH SCREEN: Enter key support ───────────────────────
+  // (buttons already have onclick in HTML; just add keyboard shortcuts)
+  ['auth-login-email','auth-login-pass'].forEach(id => {
+    document.getElementById(id)?.addEventListener('keydown', e => {
+      if (e.key === 'Enter') SkyHigh.UI.authLogin();
+    });
+  });
+  ['auth-reg-username','auth-reg-email','auth-reg-pass'].forEach(id => {
+    document.getElementById(id)?.addEventListener('keydown', e => {
+      if (e.key === 'Enter') SkyHigh.UI.authRegister();
+    });
+  });
+  // Enter key on invite code input
+  document.getElementById('input-invite-code')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') SkyHigh.UI.teamJoin();
+  });
+  document.getElementById('input-team-name')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') SkyHigh.UI.teamCreate();
+  });
+
+  // ── GAME SCREEN BUTTONS ──────────────────────────────────
 
   // Return to global view button
   document.getElementById('btn-global-view')?.addEventListener('click', () => {
@@ -55,7 +126,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Result panel next button
   document.getElementById('btn-result-next')?.addEventListener('click', () => {
     document.getElementById('result-overlay')?.classList.remove('visible');
-    // Force advance if not auto-advancing
     const s = SkyHigh.CoreSim.getState();
     if (s?.phase === 'RESULT') SkyHigh.UI._showReportPhase();
   });
@@ -81,6 +151,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       SkyHigh.UI.selectPlane(el.dataset.plane);
     });
   });
+
+  // Animate splash
+  setTimeout(() => {
+    document.getElementById('splash-cta')?.classList.add('fadeInUp');
+  }, 1200);
 
   console.log('🛫 SkyHigh Executive initialized.');
 });

@@ -123,15 +123,190 @@ window.SkyHigh.UI = (() => {
         });
       });
 
-      // Hub selection
-      document.querySelectorAll('.hub-option').forEach(opt => {
-        opt.addEventListener('click', () => {
-          document.querySelectorAll('.hub-option').forEach(h => h.classList.remove('selected'));
-          opt.classList.add('selected');
-        });
-      });
+      // Hub dropdown
+      UI._initHubDropdown();
 
       document.getElementById('btn-start-game')?.addEventListener('click', UI._startGame);
+    },
+
+    // ── HUB AIRPORT DROPDOWN ──────────────────────────────
+    _initHubDropdown() {
+      const wrapper = document.getElementById('hub-dropdown-wrapper');
+      if (!wrapper) return;
+
+      const airports = (SkyHigh.MAP_DATA?.airports || []).filter(a => a.hubLevel >= 3);
+
+      // ISO numeric → alpha-2 for flag emoji
+      const ISO2 = {
+        8:'AL',12:'DZ',24:'AO',31:'AZ',32:'AR',36:'AU',40:'AT',44:'BS',48:'BH',50:'BD',
+        51:'AM',56:'BE',68:'BO',76:'BR',100:'BG',104:'MM',116:'KH',120:'CM',124:'CA',
+        144:'LK',152:'CL',156:'CN',158:'TW',170:'CO',180:'CD',188:'CR',191:'HR',192:'CU',
+        203:'CZ',208:'DK',214:'DO',218:'EC',231:'ET',233:'EE',246:'FI',250:'FR',258:'PF',
+        266:'GA',268:'GE',276:'DE',288:'GH',300:'GR',316:'GU',320:'GT',344:'HK',348:'HU',
+        352:'IS',356:'IN',360:'ID',364:'IR',368:'IQ',372:'IE',376:'IL',380:'IT',388:'JM',
+        392:'JP',398:'KZ',400:'JO',404:'KE',410:'KR',414:'KW',417:'KG',418:'LA',422:'LB',
+        428:'LV',434:'LY',440:'LT',446:'MO',450:'MG',454:'MW',458:'MY',462:'MV',466:'ML',
+        480:'MU',484:'MX',504:'MA',508:'MZ',512:'OM',516:'NA',524:'NP',528:'NL',554:'NZ',
+        566:'NG',578:'NO',586:'PK',591:'PA',600:'PY',604:'PE',608:'PH',616:'PL',620:'PT',
+        630:'PR',634:'QA',642:'RO',643:'RU',646:'RW',686:'SN',688:'RS',702:'SG',704:'VN',
+        705:'SI',710:'ZA',716:'ZW',724:'ES',752:'SE',756:'CH',762:'TJ',764:'TH',768:'TG',
+        784:'AE',788:'TN',792:'TR',795:'TM',800:'UG',804:'UA',807:'MK',818:'EG',826:'GB',
+        834:'TZ',840:'US',854:'BF',858:'UY',860:'UZ',862:'VE',894:'ZM',
+      };
+
+      function flag(iso) {
+        const a2 = ISO2[iso];
+        if (!a2) return '🌐';
+        return a2.split('').map(c => String.fromCodePoint(0x1F1E6 - 65 + c.charCodeAt(0))).join('');
+      }
+
+      // Sort: by country alpha-2, then city
+      const sorted = [...airports].sort((a, b) => {
+        const ca = ISO2[a.countryIso] || 'ZZ', cb = ISO2[b.countryIso] || 'ZZ';
+        return ca !== cb ? ca.localeCompare(cb) : a.city.localeCompare(b.city);
+      });
+
+      // Country name lookup (human-readable for group headers)
+      const COUNTRY_NAMES = {
+        AL:'Albania',DZ:'Algeria',AO:'Angola',AZ:'Azerbaijan',AR:'Argentina',AU:'Australia',
+        AT:'Austria',BS:'Bahamas',BH:'Bahrain',BD:'Bangladesh',AM:'Armenia',BE:'Belgium',
+        BO:'Bolivia',BR:'Brazil',BG:'Bulgaria',MM:'Myanmar',KH:'Cambodia',CM:'Cameroon',
+        CA:'Canada',LK:'Sri Lanka',CL:'Chile',CN:'China',TW:'Taiwan',CO:'Colombia',
+        CD:'DR Congo',CR:'Costa Rica',HR:'Croatia',CU:'Cuba',CZ:'Czech Republic',DK:'Denmark',
+        DO:'Dominican Republic',EC:'Ecuador',ET:'Ethiopia',EE:'Estonia',FI:'Finland',
+        FR:'France',PF:'French Polynesia',GA:'Gabon',GE:'Georgia',DE:'Germany',GH:'Ghana',
+        GR:'Greece',GU:'Guam',GT:'Guatemala',HK:'Hong Kong',HU:'Hungary',IS:'Iceland',
+        IN:'India',ID:'Indonesia',IR:'Iran',IQ:'Iraq',IE:'Ireland',IL:'Israel',IT:'Italy',
+        JM:'Jamaica',JP:'Japan',KZ:'Kazakhstan',JO:'Jordan',KE:'Kenya',KR:'South Korea',
+        KW:'Kuwait',KG:'Kyrgyzstan',LA:'Laos',LB:'Lebanon',LV:'Latvia',LY:'Libya',
+        LT:'Lithuania',MO:'Macau',MG:'Madagascar',MW:'Malawi',MY:'Malaysia',MV:'Maldives',
+        ML:'Mali',MU:'Mauritius',MX:'Mexico',MA:'Morocco',MZ:'Mozambique',OM:'Oman',
+        NA:'Namibia',NP:'Nepal',NL:'Netherlands',NZ:'New Zealand',NG:'Nigeria',NO:'Norway',
+        PK:'Pakistan',PA:'Panama',PY:'Paraguay',PE:'Peru',PH:'Philippines',PL:'Poland',
+        PT:'Portugal',PR:'Puerto Rico',QA:'Qatar',RO:'Romania',RU:'Russia',RW:'Rwanda',
+        SN:'Senegal',RS:'Serbia',SG:'Singapore',VN:'Vietnam',SI:'Slovenia',ZA:'South Africa',
+        ZW:'Zimbabwe',ES:'Spain',SE:'Sweden',CH:'Switzerland',TJ:'Tajikistan',TH:'Thailand',
+        TG:'Togo',AE:'UAE',TN:'Tunisia',TR:'Turkey',TM:'Turkmenistan',UG:'Uganda',
+        UA:'Ukraine',MK:'North Macedonia',EG:'Egypt',GB:'United Kingdom',TZ:'Tanzania',
+        US:'United States',BF:'Burkina Faso',UY:'Uruguay',UZ:'Uzbekistan',VE:'Venezuela',
+        ZM:'Zambia',
+      };
+
+      let selectedId = wrapper.dataset.selected || 'JFK';
+      let isOpen = false;
+
+      function buildOption(apt) {
+        const f = flag(apt.countryIso);
+        return `<div class="hdd-opt" data-id="${apt.id}" data-city="${apt.city}" data-name="${apt.name || ''}" data-flag="${f}">
+          <span class="hdd-opt-flag">${f}</span>
+          <span class="hdd-opt-body">
+            <span class="hdd-opt-iata">${apt.id}</span>
+            <span class="hdd-opt-city">${apt.city} — ${apt.name || ''}</span>
+          </span>
+        </div>`;
+      }
+
+      function renderList(query) {
+        const q = query.toLowerCase();
+        const list = document.getElementById('hdd-list');
+        if (!list) return;
+        const filtered = sorted.filter(a =>
+          !q ||
+          a.id.toLowerCase().includes(q) ||
+          a.city.toLowerCase().includes(q) ||
+          (a.name || '').toLowerCase().includes(q) ||
+          (COUNTRY_NAMES[ISO2[a.countryIso]] || '').toLowerCase().includes(q)
+        );
+        if (!filtered.length) { list.innerHTML = '<div class="hdd-empty">No airports found</div>'; return; }
+
+        // Group by country
+        const groups = {};
+        filtered.forEach(a => {
+          const key = ISO2[a.countryIso] || 'ZZ';
+          if (!groups[key]) groups[key] = [];
+          groups[key].push(a);
+        });
+
+        list.innerHTML = Object.entries(groups).map(([alpha2, apts]) => {
+          const f = flag(apts[0].countryIso);
+          const cname = COUNTRY_NAMES[alpha2] || alpha2;
+          return `<div class="hdd-group">
+            <div class="hdd-group-header">${f} ${cname}</div>
+            ${apts.map(buildOption).join('')}
+          </div>`;
+        }).join('');
+
+        // Bind clicks
+        list.querySelectorAll('.hdd-opt').forEach(el => {
+          if (el.dataset.id === selectedId) el.classList.add('hdd-opt-selected');
+          el.addEventListener('click', () => {
+            selectedId = el.dataset.id;
+            wrapper.dataset.selected = selectedId;
+            updateTrigger(el.dataset.flag, el.dataset.id, el.dataset.city);
+            closePanel();
+          });
+        });
+      }
+
+      function updateTrigger(f, iata, city) {
+        const t = document.getElementById('hdd-trigger');
+        if (!t) return;
+        t.innerHTML = `<span class="hdd-flag">${f}</span>
+          <span class="hdd-iata">${iata}</span>
+          <span class="hdd-city">${city}</span>
+          <span class="hdd-chevron">▾</span>`;
+      }
+
+      function openPanel() {
+        const panel = document.getElementById('hdd-panel');
+        if (!panel) return;
+        isOpen = true;
+        panel.style.display = 'block';
+        document.getElementById('hdd-search')?.focus();
+        // Scroll selected into view
+        setTimeout(() => {
+          const sel = panel.querySelector('.hdd-opt-selected');
+          if (sel) sel.scrollIntoView({ block: 'center' });
+        }, 50);
+      }
+
+      function closePanel() {
+        const panel = document.getElementById('hdd-panel');
+        if (panel) panel.style.display = 'none';
+        isOpen = false;
+      }
+
+      // Render initial HTML
+      const initApt = sorted.find(a => a.id === selectedId) || sorted[0];
+      const initFlag = flag(initApt?.countryIso);
+      wrapper.innerHTML = `
+        <div class="hdd" id="hdd">
+          <button class="hdd-trigger" id="hdd-trigger" type="button">
+            <span class="hdd-flag">${initFlag}</span>
+            <span class="hdd-iata">${initApt?.id || 'JFK'}</span>
+            <span class="hdd-city">${initApt?.city || 'New York'}</span>
+            <span class="hdd-chevron">▾</span>
+          </button>
+          <div class="hdd-panel" id="hdd-panel" style="display:none">
+            <input class="hdd-search" id="hdd-search" type="text" placeholder="Search airport, city, or country…" autocomplete="off">
+            <div class="hdd-list" id="hdd-list"></div>
+          </div>
+        </div>`;
+
+      renderList('');
+
+      document.getElementById('hdd-trigger')?.addEventListener('click', () => {
+        isOpen ? closePanel() : openPanel();
+      });
+
+      document.getElementById('hdd-search')?.addEventListener('input', e => {
+        renderList(e.target.value);
+      });
+
+      // Close when clicking outside
+      document.addEventListener('click', e => {
+        if (isOpen && !document.getElementById('hdd')?.contains(e.target)) closePanel();
+      }, { capture: true });
     },
 
     selectLogo(id, emoji, name) {
@@ -149,17 +324,12 @@ window.SkyHigh.UI = (() => {
       const airline    = document.getElementById('input-airline')?.value.trim() || 'SkyHigh Airlines';
       const code       = document.getElementById('input-code')?.value.trim().toUpperCase() || 'SHX';
       const doctrineEl = document.querySelector('.doctrine-card.selected');
-      const hubEl      = document.querySelector('.hub-option.selected');
       const logoEl     = document.querySelector('.logo-opt.selected');
 
       if (!ceoName)    { UI.toast('Please enter your CEO name.', 'warning'); return; }
       if (!doctrineEl) { UI.toast('Please select a doctrine.', 'warning'); return; }
 
-      // Custom hub input takes precedence over grid selection
-      const customHub = document.getElementById('input-custom-hub')?.value.trim().toUpperCase();
-      const hubId = customHub || hubEl?.dataset.hub || 'JFK';
-
-      if (!customHub && !hubEl) { UI.toast('Please select your hub.', 'warning'); return; }
+      const hubId = document.getElementById('hub-dropdown-wrapper')?.dataset.selected || 'JFK';
 
       const logoId = logoEl?.dataset.logo || 'EAGLE';
       const logoEmoji = SkyHigh.AIRLINE_LOGOS?.find(l => l.id === logoId)?.emoji || '✈';

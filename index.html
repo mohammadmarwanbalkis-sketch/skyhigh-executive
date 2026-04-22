@@ -284,51 +284,8 @@
           <span class="card-title">Home Hub Airport</span>
           <span class="card-badge badge-gold">+5 all stats</span>
         </div>
-        <div class="hub-select">
-          <div class="hub-option" data-hub="JFK">
-            <div class="hub-code">JFK</div>
-            <div class="hub-city">New York</div>
-          </div>
-          <div class="hub-option" data-hub="LHR">
-            <div class="hub-code">LHR</div>
-            <div class="hub-city">London</div>
-          </div>
-          <div class="hub-option" data-hub="DXB">
-            <div class="hub-code">DXB</div>
-            <div class="hub-city">Dubai</div>
-          </div>
-          <div class="hub-option" data-hub="SIN">
-            <div class="hub-code">SIN</div>
-            <div class="hub-city">Singapore</div>
-          </div>
-          <div class="hub-option" data-hub="FRA">
-            <div class="hub-code">FRA</div>
-            <div class="hub-city">Frankfurt</div>
-          </div>
-          <div class="hub-option" data-hub="NRT">
-            <div class="hub-code">NRT</div>
-            <div class="hub-city">Tokyo</div>
-          </div>
-          <div class="hub-option" data-hub="GRU">
-            <div class="hub-code">GRU</div>
-            <div class="hub-city">São Paulo</div>
-          </div>
-          <div class="hub-option" data-hub="SVO">
-            <div class="hub-code">SVO</div>
-            <div class="hub-city">Moscow</div>
-          </div>
-          <div class="hub-option" data-hub="LAX">
-            <div class="hub-code">LAX</div>
-            <div class="hub-city">Los Angeles</div>
-          </div>
-        </div>
-        <div style="margin-top:0.75rem">
-          <div class="form-group">
-            <label class="form-label">Or enter any IATA code</label>
-            <input id="input-custom-hub" class="form-input" type="text" placeholder="e.g. NRT, CDG, SYD" maxlength="3" style="text-transform:uppercase">
-            <div style="font-size:0.68rem;color:#8A8AAA;margin-top:4px">Type the 3-letter airport code. Check the Events tab in-game for all airports.</div>
-          </div>
-        </div>
+        <!-- Hub airport dropdown — populated by JS -->
+        <div id="hub-dropdown-wrapper" data-selected="JFK"></div>
       </div>
 
       <!-- Starting Fleet hint -->
